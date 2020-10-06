@@ -3,9 +3,11 @@ package rvasp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/bbengfort/rvasp/pb"
 	log "github.com/sirupsen/logrus"
@@ -74,6 +76,53 @@ func (s *Server) AccountStatus(ctx context.Context, req *pb.AccountRequest) (rep
 // the message interchange between VASPs during the InterVASP protocol. The demo client
 // connects to both sides of a transaction and can push commands to the stream; any
 // messages received by the VASP as they perform the protocol are sent down to the UI.
-func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) error {
+func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) (err error) {
+	var (
+		client   string
+		messages uint64
+	)
+
+	for {
+		var req *pb.Command
+		if req, err = stream.Recv(); err != nil {
+			// The stream was closed on the client side
+			if err == io.EOF {
+				if client == "" {
+					log.Warn("live updates connection closed before first message")
+				} else {
+					log.Warnf("live updates connection from client %s closed", client)
+				}
+			}
+
+			// Some other error occurred
+			log.Errorf("connection from client %q dropped: %s", client, err)
+			return err
+		}
+
+		// If this is the first time we've seen the client, log it
+		if client == "" {
+			client = req.Client
+			log.Infof("client %s connected to live updates", client)
+		} else if client != req.Client {
+			log.Warnf("received message from %q but expected it from %q", req.Client, client)
+		}
+
+		// Handle the message
+		// TODO: actually handle the message
+		messages++
+		log.Infof("received message %d: %s", messages, req)
+
+		// Send back an acknowledgement message
+		ack := &pb.Message{
+			Update:    fmt.Sprintf("command %d acknowledged", req.Id),
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+		if err = stream.Send(ack); err != nil {
+			log.Errorf("could not send message to %q: %s", client, err)
+			return err
+		}
+
+	}
+
 	return nil
 }

@@ -70,7 +70,7 @@ message Command {
 
     // only one of these fields can be set, and the field that is set should
     // match the RPC type described above.
-    oneof message {
+    oneof request {
         TransferRequest transfer = 11;
         AccountRequest account = 12;
     }
@@ -89,7 +89,7 @@ message Message {
 
     // if type and id are greater than zero, one of these fields will be set, matching
     // the RPC type described above.
-    oneof message {
+    oneof reply {
         TransferReply transfer = 11;
         AccountReply account = 12;
     }
