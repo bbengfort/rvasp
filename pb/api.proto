@@ -1,0 +1,97 @@
+syntax = "proto3";
+package pb;
+
+// The TRISA Demo service uses a bidirectional stream to allow a websockets service to
+// display messages and commands in real time. Commands implement the same RPCs as the
+// TRISA Integration service, using a wrapper format. Messages from the rVASP are sent
+// to the UI to show messaging progress.
+service TRISADemo {
+    rpc LiveUpdates (stream Command) returns (stream Message);
+}
+
+// The TRISA Integration service can be used by VASPs as they develop their own internal
+// implementations of the InterVASP protocol. The integration service provides one
+// primary RPC - TransferTo, which gets the rVASP to kick off an InterVASP transfer
+// request. The rVASP also implements the InterVASP protocol to receive transactions and
+// provides a helper RPC, AccountStatus to get back all transactions the rVASP has seen
+// for debugging purposes.
+service TRISAIntegration {
+    rpc TransferTo (TransferRequest) returns (TransferReply);
+    rpc AccountStatus (AccountRequest) returns (AccountReply);
+}
+
+// Allows for standardized error handling for demo purposes.
+message Error {
+    int32 code = 1;
+    string message = 2;
+}
+
+// Describes a simple transaction between an originator and beneficiary, identified by
+// their email addresses or other client-specific ID.
+// TODO: handle currency better than just using a simple float.
+// TODO: include other diagnostic information in the transaction like IVMS 101 data,
+// which will presumably be stored by the rVASP in order to make the transaction.
+message Transaction {
+    string originator = 1;
+    string beneficiary = 2;
+    float amount = 3;
+    string timestamp = 4;
+}
+
+message TransferRequest {
+    Transaction transaction = 1;
+}
+
+message TransferReply {
+    Error error = 1;
+}
+
+message AccountRequest {
+    string account = 1; // email address of the account to get information for.
+}
+
+message AccountReply {
+    Error error = 1;
+    repeated Transaction transactions = 2;
+}
+
+// Specifies the RPC the command is wrapping in the bidirectional stream.
+enum RPC {
+    NORPC = 0;
+    TRANSFER = 1;
+    ACCOUNT = 2;
+}
+
+// A wrapper for the TransferRequet and AccountRequest RPCs to be sent via streaming.
+message Command {
+    RPC type = 1;       // what type of command is being sent to the rVASP
+    uint64 id = 2;      // client side message id for req/rep tracking
+    string client = 3;  // unique ID so the rVASP can correctly dispatch messages
+
+    // only one of these fields can be set, and the field that is set should
+    // match the RPC type described above.
+    oneof message {
+        TransferRequest transfer = 11;
+        AccountRequest account = 12;
+    }
+}
+
+// Message is either a wrapper for a TransferReply or AccountReply RPCs or it is a live
+// update message sent from the rVASP to show the communication interactions of the
+// InterVASP protocol. If it is a wrapper, then type will be > 0 and the ID will match
+// the id of the command request sent by the client. Otherwise both of these fields will
+// be zero and the update string will be populated.
+message Message {
+    RPC type = 1;
+    uint64 id = 2;
+    string update = 3;
+    string timestamp = 4;
+
+    // if type and id are greater than zero, one of these fields will be set, matching
+    // the RPC type described above.
+    oneof message {
+        TransferReply transfer = 11;
+        AccountReply account = 12;
+    }
+}
+
