@@ -96,7 +96,7 @@ func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) (err error) 
 
 			// Some other error occurred
 			log.Errorf("connection from client %q dropped: %s", client, err)
-			return err
+			return nil
 		}
 
 		// If this is the first time we've seen the client, log it
@@ -123,6 +123,4 @@ func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) (err error) 
 		}
 
 	}
-
-	return nil
 }
