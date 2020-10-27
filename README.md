@@ -32,26 +32,33 @@ $ go run ./cmd/rvasp serve
 The server should now be listening for TRISADemo RPC messages. To send messages using the python API, make sure you can import the modules from `pb/rvaspy` and run the following script:
 
 ```python
-import grpc
+from rvaspy.client import RVASP
 
-from api_pb2 import *
-from api_pb2_grpc import *
-
-CLIENT = "foo"
-
-
-channel = grpc.insecure_channel("localhost:4434")
-stub = TRISADemoStub(channel)
+api = RVASP("rvaspy", "localhost:4434")
 
 cmds = [
-    Command(
-        type=ACCOUNT, client=CLIENT, id=1, request=AccountRequest(account="foo@example.com")),
-    Command(
-        type=TRANSFER, client=CLIENT, id=2, request=TransferRequest(transaction=None)),
+    api.account_request("robert@bobvasp.co.uk"),
+    api.transfer_request("robert@bobvasp.co.uk", "mary@alicevasp.us", 42.99)
 ]
 
-for msg in stub.LiveUpdates(cmds):
+for msg in api.stub.LiveUpdates(iter(cmds)):
     print(msg)
 ```
 
-Note that this code is currently untested.
+Note that the `RVASP` api client is not fully implemented yet.
+
+## Containers
+
+We are currently not using a container repository, so to build the docker images locally, please run the following steps in order:
+
+1. Build the root Docker image tagged as `trisacrypto/rvasp:latest`
+2. Build the alice, bob, and evil containers in `containers/`, tagging them appropriately
+3. Use `docker-compose` to run the three rVASPs locally
+
+To simplify the build process, we have added a script that builds all 4 images. You can execute the building script as follows:
+
+```
+$ ./containers/rebuild.sh
+```
+
+Then all that's needed is to run `docker-compose up` to get the robot VASPs running locally.

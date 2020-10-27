@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import json
 import random
 import sqlite3
@@ -524,7 +525,9 @@ if __name__ == "__main__":
         description="generates database fixtures for an rVASP"
     )
     parser.add_argument(
-        "-v", "--vasp", choices={"bob", "alice", "evil"}, required=True,
+        "-v", "--vasp",
+        choices={"bob", "alice", "evil"},
+        default=os.getenv("RVASP_NAME"),
         help="name of the VASP to generate the database for",
     )
     parser.add_argument(
@@ -532,7 +535,8 @@ if __name__ == "__main__":
         help="clean up anything in the tables before populating",
     )
     parser.add_argument(
-        "-d", "--db", default="rvasp.db",
+        "-d", "--db",
+        default=os.getenv("DATABASE_URL", "rvasp.db"),
         help="path to sqlite3 database to connect to",
     )
 
