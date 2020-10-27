@@ -12,18 +12,29 @@ import (
 	"github.com/bbengfort/rvasp/pb"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // New creates a rVASP server with the specified configuration and prepares
 // it to listen for and serve GRPC requests.
-func New() (s *Server, err error) {
+func New(dsn string) (s *Server, err error) {
 	s = &Server{}
+	if s.db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{}); err != nil {
+		return nil, err
+	}
+
+	if err = MigrateDB(s.db); err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 
 // Server implements the GRPC TRISAInterVASP and TRISADemo services.
 type Server struct {
 	srv *grpc.Server
+	db  *gorm.DB
 }
 
 // Serve GRPC requests on the specified address.

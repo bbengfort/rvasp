@@ -25,16 +25,16 @@ const (
 
 // National identifier type codes
 const (
-	NationalIdentifierARNU = 0
-	NationalIdentifierCCPT = 1
-	NationalIdentifierRAID = 2
-	NationalIdentifierDRLC = 3
-	NationalIdentifierFIIN = 4
-	NationalIdentifierTXID = 5
-	NationalIdentifierSOCS = 6
-	NationalIdentifierIDCD = 7
-	NationalIdentifierLEIX = 8
-	NationalIdentifierMISC = 9
+	NationalIdentifierARNU = 0 // Alien registration number
+	NationalIdentifierCCPT = 1 // Passport number
+	NationalIdentifierRAID = 2 // Registration authorrity identifier
+	NationalIdentifierDRLC = 3 // Driver license number
+	NationalIdentifierFIIN = 4 // Foreign investment identity number
+	NationalIdentifierTXID = 5 // Tax identification number
+	NationalIdentifierSOCS = 6 // Social security number
+	NationalIdentifierIDCD = 7 // Identity card number
+	NationalIdentifierLEIX = 8 // Legal entity identifier (LEI)
+	NationalIdentifierMISC = 9 // Unspecified
 )
 
 // IVMS101Person is a top level representation of IVMS101 data that can be serialized or
@@ -93,7 +93,7 @@ type IVMS101Address struct {
 	Floor              string   `json:"floor,omitempty"`
 	PostBox            string   `json:"post_box,omitempty"`
 	Room               string   `json:"room,omitempty"`
-	PostCode           string   `json:"postcode,omitempty"`
+	PostCode           string   `json:"post_code,omitempty"`
 	TownName           string   `json:"town_name,omitempty"`
 	TownLocationName   string   `json:"town_location_name,omitempty"`
 	DistrictName       string   `json:"district_name,omitempty"`

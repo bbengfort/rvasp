@@ -3,12 +3,14 @@ package rvasp
 import (
 	"time"
 
-	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 // VASP is a record of known partner VASPs and caches TRISA protocol information. This
-// table also contains IVMS101 data that identifies the VASP.
+// table also contains IVMS101 data that identifies the VASP (but only for the local
+// VASP - we assume that VASPs do not have IVMS101 data on each other and have to use
+// the directory service for that).
 // TODO: modify VASP ID to a GUID
 type VASP struct {
 	gorm.Model
@@ -18,8 +20,8 @@ type VASP struct {
 	Endpoint *string    `gorm:"null"`
 	PubKey   *string    `gorm:"null"`
 	NotAfter *time.Time `gorm:"null"`
-	IsLocal  bool       `gorm:"default:false"`
-	IVMS101  string     `gorm:"not null"`
+	IsLocal  bool       `gorm:"column:is_local;default:false"`
+	IVMS101  string     `gorm:"column:ivms101"`
 }
 
 // TableName explicitly defines the name of the table for the model
@@ -28,15 +30,13 @@ func (VASP) TableName() string {
 }
 
 // Wallet is a mapping of wallet IDs to VASPs to determine where to send transactions.
-// It also contains the IVMS 101 data for KYC verification, in this table it is just
-// stored as a JSON string rather than breaking it down to the field level.
+// Provider lookups can happen by wallet address or by email.
 type Wallet struct {
 	gorm.Model
 	Address    string `gorm:"uniqueIndex"`
 	Email      string `gorm:"uniqueIndex"`
 	ProviderID uint   `gorm:"not null"`
 	Provider   VASP   `gorm:"foreignKey:ProviderID"`
-	IVMS101    string `gorm:"not null"`
 }
 
 // TableName explicitly defines the name of the table for the model
@@ -45,15 +45,19 @@ func (Wallet) TableName() string {
 }
 
 // Account contains details about the transactions that are served by the local VASP.
+// It also contains the IVMS 101 data for KYC verification, in this table it is just
+// stored as a JSON string rather than breaking it down to the field level. Only
+// customers of the VASP have accounts.
 type Account struct {
 	gorm.Model
 	Name          string          `gorm:"not null"`
 	Email         string          `gorm:"uniqueIndex;not null"`
 	WalletAddress string          `gorm:"uniqueIndex;not null;column:wallet_address"`
-	Wallet        Wallet          `gorm:"foreignKey:WalletAddress"`
-	Balance       decimal.Decimal `gorm:"type:numeric(15,2)"`
-	Completed     uint64          `gorm:"not null"`
-	Pending       uint64          `gorm:"not null"`
+	Wallet        Wallet          `gorm:"foreignKey:WalletAddress;references:Address"`
+	Balance       decimal.Decimal `gorm:"type:numeric(15,2);default:0.0"`
+	Completed     uint64          `gorm:"not null;default:0"`
+	Pending       uint64          `gorm:"not null;default:0"`
+	IVMS101       string          `gorm:"column:ivms101;not null"`
 }
 
 // TableName explicitly defines the name of the table for the model
@@ -65,13 +69,28 @@ func (Account) TableName() string {
 type Transaction struct {
 	gorm.Model
 	AccountID     uint            `gorm:"not null"`
-	Account       Account         `gorm:"foreignKey:AcountID"`
-	OriginatorID  uint            `gorm:"not null"`
+	Account       Account         `gorm:"foreignKey:AccountID"`
+	OriginatorID  uint            `gorm:"column:originator_id;not null"`
 	Originator    Wallet          `gorm:"foreignKey:OriginatorID"`
-	BeneficiaryID uint            `gorm:"not null"`
+	BeneficiaryID uint            `gorm:"column:beneficiary_id;not null"`
 	Beneficiary   Wallet          `gorm:"foreignKey:BeneficiaryID"`
 	Amount        decimal.Decimal `gorm:"type:numeric(15,2)"`
 	Debit         bool            `gorm:"not null"`
 	Completed     bool            `gorm:"not null;default:false"`
 	Timestamp     time.Time       `gorm:"not null"`
+}
+
+// TableName explicitly defines the name of the table for the model
+func (Transaction) TableName() string {
+	return "transactions"
+}
+
+// MigrateDB the schema based on the models defined above.
+func MigrateDB(db *gorm.DB) (err error) {
+	// Migrate models
+	if err = db.AutoMigrate(&VASP{}, &Wallet{}, &Account{}, &Transaction{}); err != nil {
+		return err
+	}
+
+	return nil
 }

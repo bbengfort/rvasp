@@ -26,6 +26,11 @@ func main() {
 					Usage: "the address and port to bind the server on",
 					Value: ":4434",
 				},
+				cli.StringFlag{
+					Name:  "d, db",
+					Usage: "the dsn to the sqlite3 database to connect to",
+					Value: "fixtures/rvasp.db",
+				},
 			},
 		},
 	}
@@ -36,7 +41,7 @@ func main() {
 // Serve the TRISA directory service
 func serve(c *cli.Context) (err error) {
 	var srv *rvasp.Server
-	if srv, err = rvasp.New(); err != nil {
+	if srv, err = rvasp.New(c.String("db")); err != nil {
 		return cli.NewExitError(err, 1)
 	}
 
