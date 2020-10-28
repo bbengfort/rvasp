@@ -112,3 +112,28 @@ func MigrateDB(db *gorm.DB) (err error) {
 
 	return nil
 }
+
+// BalanceFloat converts the balance decmial into an exact two precision float32 for
+// use with the protocol buffers.
+func (a Account) BalanceFloat() float32 {
+	bal, _ := a.Balance.Truncate(2).Float64()
+	return float32(bal)
+}
+
+// Transactions returns an ordered list of transactions associated with the account
+// ordered by the timestamp of the transaction, listing any pending transactions at the
+// top. This function may also support pagination and limiting functions, which is why
+// we're using it rather than having a direct relationship on the model.
+func (a Account) Transactions(db *gorm.DB) (records []Transaction, err error) {
+	if err = db.Where("account_id = ?", a.ID).Find(&records).Error; err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// AmountFloat converts the amount decmial into an exact two precision float32 for
+// use with the protocol buffers.
+func (t Transaction) AmountFloat() float32 {
+	bal, _ := t.Amount.Truncate(2).Float64()
+	return float32(bal)
+}

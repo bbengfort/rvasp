@@ -488,7 +488,7 @@ def create_wallets(conn, vasp):
 def create_accounts(conn, vasp):
     params = []
     cur = conn.cursor()
-    sql = "INSERT INTO accounts (name, email, wallet_address, ivms101, balance, created_at, updated_at) VALUES (?,?,?,?,?,?)"
+    sql = "INSERT INTO accounts (name, email, wallet_address, ivms101, balance, created_at, updated_at) VALUES (?,?,?,?,?,?,?)"
 
     for wallet in WALLETS:
         domain = wallet[1].split("@")[-1]

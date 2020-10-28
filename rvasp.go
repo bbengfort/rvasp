@@ -2,6 +2,7 @@ package rvasp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -71,7 +72,7 @@ func (s *Server) Shutdown() (err error) {
 	return nil
 }
 
-// TransferTo accepts a transfer request from a beneficiary and begins the InterVASP
+// Transfer accepts a transfer request from a beneficiary and begins the InterVASP
 // protocol to perform identity verification prior to establishing the transactoin in
 // the blockchain between crypto wallet addresses.
 func (s *Server) Transfer(ctx context.Context, req *pb.TransferRequest) (rep *pb.TransferReply, err error) {
@@ -80,7 +81,60 @@ func (s *Server) Transfer(ctx context.Context, req *pb.TransferRequest) (rep *pb
 
 // AccountStatus is a demo RPC to allow demo clients to fetch their recent transactions.
 func (s *Server) AccountStatus(ctx context.Context, req *pb.AccountRequest) (rep *pb.AccountReply, err error) {
-	return nil, nil
+	rep = &pb.AccountReply{}
+
+	// Lookup the account in the database
+	var account Account
+	if err = s.db.Where("email = ?", req.Account).First(&account).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			rep.Error = pb.Errorf(pb.ErrNotFound, "account not found")
+			log.Info(rep.Error.Error())
+			return rep, nil
+		}
+		log.Error(err.Error())
+		return nil, err
+	}
+
+	rep.Name = account.Name
+	rep.Email = account.Email
+	rep.WalletAddress = account.WalletAddress
+	rep.Balance = account.BalanceFloat()
+	rep.Completed = account.Completed
+	rep.Pending = account.Pending
+
+	if !req.NoTransactions {
+		var transactions []Transaction
+		if transactions, err = account.Transactions(s.db); err != nil {
+			log.Error(err.Error())
+			return nil, err
+		}
+
+		rep.Transactions = make([]*pb.Transaction, 0, len(transactions))
+		for _, transaction := range transactions {
+			rep.Transactions = append(rep.Transactions, &pb.Transaction{
+				Account: transaction.Account.Email,
+				Originator: &pb.Identity{
+					WalletAddress: transaction.Originator.WalletAddress,
+					Email:         transaction.Originator.Wallet.Email,
+					Ivms101:       transaction.Originator.IVMS101,
+					Provider:      transaction.Originator.Provider,
+				},
+				Beneficiary: &pb.Identity{
+					WalletAddress: transaction.Beneficiary.WalletAddress,
+					Email:         transaction.Beneficiary.Wallet.Email,
+					Ivms101:       transaction.Beneficiary.IVMS101,
+					Provider:      transaction.Beneficiary.Provider,
+				},
+				Amount:    transaction.AmountFloat(),
+				Debit:     transaction.Debit,
+				Completed: transaction.Completed,
+				Timestamp: transaction.Timestamp.Format(time.RFC3339),
+			})
+		}
+	}
+
+	log.Infof("account status %s with %d transactions", rep.Email, len(rep.Transactions))
+	return rep, nil
 }
 
 // LiveUpdates is a demo bidirectional RPC that allows demo clients to explicitly show
@@ -119,19 +173,39 @@ func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) (err error) 
 		}
 
 		// Handle the message
-		// TODO: actually handle the message
 		messages++
 		log.Infof("received message %d: %s", messages, req)
 
-		// Send back an acknowledgement message
-		ack := &pb.Message{
-			Update:    fmt.Sprintf("command %d acknowledged", req.Id),
-			Timestamp: time.Now().Format(time.RFC3339),
-		}
-		if err = stream.Send(ack); err != nil {
-			log.Errorf("could not send message to %q: %s", client, err)
-			return err
-		}
+		switch req.Type {
+		case pb.RPC_NORPC:
+			// Send back an acknowledgement message
+			ack := &pb.Message{
+				Type:      pb.RPC_NORPC,
+				Id:        req.Id,
+				Update:    fmt.Sprintf("command %d acknowledged", req.Id),
+				Timestamp: time.Now().Format(time.RFC3339),
+			}
+			if err = stream.Send(ack); err != nil {
+				log.Errorf("could not send message to %q: %s", client, err)
+				return err
+			}
+		case pb.RPC_ACCOUNT:
+			var rep *pb.AccountReply
+			if rep, err = s.AccountStatus(context.Background(), req.GetAccount()); err != nil {
+				return err
+			}
 
+			ack := &pb.Message{
+				Type:      pb.RPC_ACCOUNT,
+				Id:        req.Id,
+				Timestamp: time.Now().Format(time.RFC3339),
+				Reply:     &pb.Message_Account{Account: rep},
+			}
+
+			if err = stream.Send(ack); err != nil {
+				log.Errorf("could not send message to %q: %s", client, err)
+				return err
+			}
+		}
 	}
 }

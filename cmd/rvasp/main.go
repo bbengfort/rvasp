@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/bbengfort/rvasp"
+	"github.com/bbengfort/rvasp/pb"
 	"github.com/urfave/cli"
+	"google.golang.org/grpc"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -27,7 +33,7 @@ func main() {
 					Name:   "a, addr",
 					Usage:  "the address and port to bind the server on",
 					Value:  ":4434",
-					EnvVar: "RVASP_BIND_ADDR",
+					EnvVar: "RVASP_ADDR",
 				},
 				cli.StringFlag{
 					Name:   "d, db",
@@ -48,6 +54,56 @@ func main() {
 					Usage:  "the dsn to the sqlite3 database to connect to",
 					Value:  "fixtures/rvasp.db",
 					EnvVar: "DATABASE_URL",
+				},
+			},
+		},
+		{
+			Name:     "account",
+			Usage:    "get the account status and current transactions",
+			Category: "client",
+			Action:   account,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:   "a, addr",
+					Usage:  "the address and port to connect to the server on",
+					Value:  "localhost:4434",
+					EnvVar: "RVASP_ADDR",
+				},
+				cli.StringFlag{
+					Name:   "e, account",
+					Usage:  "the email address of the account",
+					EnvVar: "RVASP_CLIENT_ACCOUNT",
+				},
+				cli.BoolFlag{
+					Name:  "T, no-transactions",
+					Usage: "don't include any transactions in the response",
+				},
+			},
+		},
+		{
+			Name:     "transfer",
+			Usage:    "transfer funds, initiating the TRISA protocol",
+			Category: "client",
+			Action:   transfer,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:   "a, addr",
+					Usage:  "the address and port to connect to the server on",
+					Value:  "localhost:4434",
+					EnvVar: "RVASP_ADDR",
+				},
+				cli.StringFlag{
+					Name:   "e, account",
+					Usage:  "the email address of the account",
+					EnvVar: "RVASP_CLIENT_ACCOUNT",
+				},
+				cli.StringFlag{
+					Name:  "b, beneficiary",
+					Usage: "the email or wallet address of the beneficiary",
+				},
+				cli.Float64Flag{
+					Name:  "d, amount",
+					Usage: "the amount to transfer to the beneficiary",
 				},
 			},
 		},
@@ -79,5 +135,91 @@ func initdb(c *cli.Context) (err error) {
 	if err = rvasp.MigrateDB(db); err != nil {
 		return cli.NewExitError(err, 1)
 	}
+	return nil
+}
+
+// Client method: get account status
+func account(c *cli.Context) (err error) {
+	req := &pb.AccountRequest{
+		Account:        c.String("account"),
+		NoTransactions: c.Bool("no-transactions"),
+	}
+
+	if req.Account == "" {
+		return cli.NewExitError("specify account email", 1)
+	}
+
+	client, err := makeClient(c)
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	rep, err := client.AccountStatus(ctx, req)
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	return printJSON(rep)
+}
+
+// Client method: transfer funds
+func transfer(c *cli.Context) (err error) {
+	req := &pb.TransferRequest{
+		Account:     c.String("account"),
+		Beneficiary: c.String("beneficiary"),
+		Amount:      float32(c.Float64("amount")),
+	}
+
+	if req.Account == "" {
+		return cli.NewExitError("specify account email", 1)
+	}
+
+	if req.Beneficiary == "" {
+		return cli.NewExitError("specify a beneficiary email or wallet", 1)
+	}
+
+	if req.Amount <= 0.0 {
+		return cli.NewExitError("specify a transfer amount", 1)
+	}
+
+	client, err := makeClient(c)
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	rep, err := client.Transfer(ctx, req)
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	return printJSON(rep)
+}
+
+// helper function to create the GRPC client with default options
+func makeClient(c *cli.Context) (_ pb.TRISAIntegrationClient, err error) {
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithInsecure())
+
+	var cc *grpc.ClientConn
+	if cc, err = grpc.Dial(c.String("addr"), opts...); err != nil {
+		return nil, err
+	}
+	return pb.NewTRISAIntegrationClient(cc), nil
+}
+
+// helper function to print JSON response and exit
+func printJSON(v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	fmt.Println(string(data))
 	return nil
 }

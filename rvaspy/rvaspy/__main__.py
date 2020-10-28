@@ -9,8 +9,8 @@ def main(args):
     api = connect(host=args.addr, name=args.client)
 
     cmds = [
-        api.account_request("robert@bobvasp"),
-        api.transfer_request("robert@bobvasp", "mary@alicevasp", 42.99)
+        api.account_request("alice@alicevasp.us"),
+        api.transfer_request("alice@alicevasp.us", "bob@bobvasp.co.uk", 42.99)
     ]
 
     for msg in api.stub.LiveUpdates(iter(cmds)):
