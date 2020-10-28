@@ -71,9 +71,9 @@ type Transaction struct {
 	AccountID     uint            `gorm:"not null"`
 	Account       Account         `gorm:"foreignKey:AccountID"`
 	OriginatorID  uint            `gorm:"column:originator_id;not null"`
-	Originator    Wallet          `gorm:"foreignKey:OriginatorID"`
+	Originator    Identity        `gorm:"foreignKey:OriginatorID"`
 	BeneficiaryID uint            `gorm:"column:beneficiary_id;not null"`
-	Beneficiary   Wallet          `gorm:"foreignKey:BeneficiaryID"`
+	Beneficiary   Identity        `gorm:"foreignKey:BeneficiaryID"`
 	Amount        decimal.Decimal `gorm:"type:numeric(15,2)"`
 	Debit         bool            `gorm:"not null"`
 	Completed     bool            `gorm:"not null;default:false"`
@@ -85,10 +85,28 @@ func (Transaction) TableName() string {
 	return "transactions"
 }
 
+// Identity holds IVMS 101 data for an originator or a beneficiary that was sent as
+// part of the transaction process. This should not be stored in the wallet since the
+// wallet is a representation of the local VASPs knowledge about customers and bercause
+// the identity information could change between transactions. This intermediate table
+// is designed to more closely mimic data storage as part of a blockchain transaction.
+type Identity struct {
+	gorm.Model
+	WalletAddress string `gorm:"not null;column:wallet_address"`
+	Wallet        Wallet `gorm:"foreignKey:WalletAddress;references:Address"`
+	IVMS101       string `gorm:"column:ivms101;not null"`
+	Provider      string `gorm:"not null"`
+}
+
+// TableName explicitly defines the name of the table for the model
+func (Identity) TableName() string {
+	return "identities"
+}
+
 // MigrateDB the schema based on the models defined above.
 func MigrateDB(db *gorm.DB) (err error) {
 	// Migrate models
-	if err = db.AutoMigrate(&VASP{}, &Wallet{}, &Account{}, &Transaction{}); err != nil {
+	if err = db.AutoMigrate(&VASP{}, &Wallet{}, &Account{}, &Transaction{}, &Identity{}); err != nil {
 		return err
 	}
 

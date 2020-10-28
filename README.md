@@ -29,12 +29,18 @@ To get started using the rVASP, you can run the local server as follows:
 $ go run ./cmd/rvasp serve
 ```
 
-The server should now be listening for TRISADemo RPC messages. To send messages using the python API, make sure you can import the modules from `pb/rvaspy` and run the following script:
+The server should now be listening for TRISADemo RPC messages. To send messages using the python API, make sure you can import the modules from `rvaspy` - the simplest way to do this is to install the package in editable mode as follows:
+
+```
+$ pip install -e ./rvaspy/
+```
+
+This will use the `setup.py` file in the `rvaspy` directory to install the package to your `$PYTHON_PATH`. Because it is in editable mode, any time you regenerate the protocol buffers or pull the repository, the module should be updated on the next time you import. An example script for using the package is as follows:
 
 ```python
-from rvaspy.client import RVASP
+import rvaspy
 
-api = RVASP("rvaspy", "localhost:4434")
+api = rvaspy.connect("localhost:4434")
 
 cmds = [
     api.account_request("robert@bobvasp.co.uk"),

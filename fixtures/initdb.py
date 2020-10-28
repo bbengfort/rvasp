@@ -488,7 +488,7 @@ def create_wallets(conn, vasp):
 def create_accounts(conn, vasp):
     params = []
     cur = conn.cursor()
-    sql = "INSERT INTO accounts (name, email, wallet_address, ivms101, created_at, updated_at) VALUES (?,?,?,?,?,?)"
+    sql = "INSERT INTO accounts (name, email, wallet_address, ivms101, balance, created_at, updated_at) VALUES (?,?,?,?,?,?)"
 
     for wallet in WALLETS:
         domain = wallet[1].split("@")[-1]
@@ -504,7 +504,9 @@ def create_accounts(conn, vasp):
         ivms = json.dumps(wallet[3])
         ts = datetime.now()
 
-        params.append([name, wallet[1], wallet[0], ivms, ts, ts])
+        # Give the account a random positive balance
+        balance = random.randint(50, 5000) + (random.randint(0, 100) / 100)
+        params.append([name, wallet[1], wallet[0], ivms, balance, ts, ts])
 
     cur.executemany(sql, params)
 

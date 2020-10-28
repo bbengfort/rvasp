@@ -16,7 +16,7 @@ service TRISADemo {
 // provides a helper RPC, AccountStatus to get back all transactions the rVASP has seen
 // for debugging purposes.
 service TRISAIntegration {
-    rpc TransferTo (TransferRequest) returns (TransferReply);
+    rpc Transfer (TransferRequest) returns (TransferReply);
     rpc AccountStatus (AccountRequest) returns (AccountReply);
 }
 
@@ -26,33 +26,65 @@ message Error {
     string message = 2;
 }
 
-// Describes a simple transaction between an originator and beneficiary, identified by
-// their email addresses or other client-specific ID.
-// TODO: handle currency better than just using a simple float.
-// TODO: include other diagnostic information in the transaction like IVMS 101 data,
-// which will presumably be stored by the rVASP in order to make the transaction.
+// Identity maps a wallet address, email, and VASP provider and is used to store
+// originator and beneficiary data as well as the KYC information that is collected
+// during the TRISA protocol exchange in JSON format.
+message Identity {
+    string wallet_address = 1;
+    string email = 2;
+    string ivms101 = 3;
+    string provider = 4;
+}
+
+// Describes a simple transaction between an originator and beneficiary and includes
+// identity information that was exchanged during the TRISA protocol.
 message Transaction {
-    string originator = 1;
-    string beneficiary = 2;
-    float amount = 3;
-    string timestamp = 4;
+    string account = 1;         // email address of the account the transaction is associated with
+    Identity originator = 2;    // IVMS101 identity and wallet of originator and IVMS101 data for provider
+    Identity beneficiary = 3;   // IVMS101 identity and wallet of beneficiary and IVMS101 data for provider
+    float amount = 4;           // amount of the transaction
+    bool debit = 5;             // if true the amount was debited from account, otherwise it was credited
+    bool completed = 6;         // if the transaction has been completed or is still pending
+    string timestamp = 7;       // timestamp of completion on the account provider side
 }
 
+// Initiates a transfer from the specified account to the specified wallet address or
+// email address for a known wallet at some other rVASP.
 message TransferRequest {
-    Transaction transaction = 1;
+    string account = 1;         // email address of the account to debit
+    string beneficiary = 2;     // email address or wallet id to look up beneficiary with
+    float amount = 3;           // amount to transfer to the beneficiary (will be truncated to 2 decimal points)
 }
 
+// The transfer reply will contain the details of the transaction initiated or completed
+// or an error if there are insufficient funds or the account or beneficiary could not
+// be looked up. Errors encountered during the TRISA protocol may also be returned.
 message TransferReply {
     Error error = 1;
+    Transaction transaction = 2;
 }
 
+// Account request is used to fetch the status information of the account as well as
+// all the transactions associated with the account (unless otherwise requested).
+// TODO: implement transaction pagination.
 message AccountRequest {
-    string account = 1; // email address of the account to get information for.
+    string account = 1;         // email address of the account to get information for.
+    bool no_transactions = 2;   // do not return list of transactions, just status info.
+    uint32 page = 3;            // not implemented yet
+    uint32 per_page = 4;        // not implemented yet
 }
 
+// Returns the account information and balance as well as transactions ordered from
+// most to least recent. An error is returned if the account cannot be found.
 message AccountReply {
     Error error = 1;
-    repeated Transaction transactions = 2;
+    string name = 2;
+    string email = 3;
+    string wallet_address = 4;
+    float balance = 5;
+    uint64 completed = 6;
+    uint64 pending = 7;
+    repeated Transaction transactions = 8;
 }
 
 // Specifies the RPC the command is wrapping in the bidirectional stream.

@@ -74,7 +74,7 @@ func (s *Server) Shutdown() (err error) {
 // TransferTo accepts a transfer request from a beneficiary and begins the InterVASP
 // protocol to perform identity verification prior to establishing the transactoin in
 // the blockchain between crypto wallet addresses.
-func (s *Server) TransferTo(ctx context.Context, req *pb.TransferRequest) (rep *pb.TransferReply, err error) {
+func (s *Server) Transfer(ctx context.Context, req *pb.TransferRequest) (rep *pb.TransferReply, err error) {
 	return nil, nil
 }
 
