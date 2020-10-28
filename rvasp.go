@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -29,13 +30,19 @@ func New(dsn string) (s *Server, err error) {
 		return nil, err
 	}
 
+	// TODO: mark the VASP local based on name or configuration rather than erroring
+	if err = s.db.Where("is_local = ?", true).First(&s.vasp).Error; err != nil {
+		return nil, fmt.Errorf("could not fetch local VASP info from database: %s", err)
+	}
+
 	return s, nil
 }
 
 // Server implements the GRPC TRISAInterVASP and TRISADemo services.
 type Server struct {
-	srv *grpc.Server
-	db  *gorm.DB
+	srv  *grpc.Server
+	db   *gorm.DB
+	vasp VASP
 }
 
 // Serve GRPC requests on the specified address.
@@ -206,6 +213,146 @@ func (s *Server) LiveUpdates(stream pb.TRISADemo_LiveUpdatesServer) (err error) 
 				log.Errorf("could not send message to %q: %s", client, err)
 				return err
 			}
+		case pb.RPC_TRANSFER:
+			// HACK: simulate the TRISA process as a quick stub to unblock the front end
+			if err = s.simulateTRISA(stream, req, client); err != nil {
+				log.Error(err.Error())
+				return err
+			}
 		}
 	}
+}
+
+func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Command, client string) (err error) {
+	// Get the transfer from the original command, will panic if nil
+	transfer := req.GetTransfer()
+
+	// Lookup the account associated with the transfer originator
+	var account Account
+	if err = s.db.Where("email = ?", transfer.Account).First(&account).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			rep := &pb.Message{
+				Type:      pb.RPC_TRANSFER,
+				Id:        req.Id,
+				Timestamp: time.Now().Format(time.RFC3339),
+				Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
+					Error: pb.Errorf(pb.ErrNotFound, "account not found"),
+				}},
+			}
+
+			if err = stream.Send(rep); err != nil {
+				return fmt.Errorf("could not send transfer reply to %q: %s", client, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("could not fetch account: %s", err)
+	}
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("account %d accessed successfully", account.ID)); err != nil {
+		return err
+	}
+
+	// Lookup the wallet of the beneficiary
+	var beneficiary Wallet
+	if err = s.db.Preload("Provider").Where("email = ?", transfer.Beneficiary).Or("address = ?", transfer.Beneficiary).First(&beneficiary).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			rep := &pb.Message{
+				Type:      pb.RPC_TRANSFER,
+				Id:        req.Id,
+				Timestamp: time.Now().Format(time.RFC3339),
+				Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
+					Error: pb.Errorf(pb.ErrNotFound, "beneficiary wallet not found"),
+				}},
+			}
+
+			if err = stream.Send(rep); err != nil {
+				return fmt.Errorf("could not send transfer reply to %q: %s", client, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("could not fetch beneficiary wallet: %s", err)
+	}
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("wallet %s (%s) provided by %s", beneficiary.Address, beneficiary.Email, beneficiary.Provider.Name)); err != nil {
+		return err
+	}
+
+	if err = sendUpdate(stream, req, client, "beginning TRISA protocol for identity exchange"); err != nil {
+		return err
+	}
+
+	if err = sendUpdate(stream, req, client, "VASP public key not cached, looking up TRISA directory service"); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
+	if err = sendUpdate(stream, req, client, "sending handshake request to [endpoint]"); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
+	if err = sendUpdate(stream, req, client, "sending handshake request to [endpoint]"); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(2200)) * time.Millisecond)
+	if err = sendUpdate(stream, req, client, "[vasp] verified, secure TRISA connection established"); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("identity for beneficiary %q confirmed - beginning transaction", beneficiary.Email)); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(6200)) * time.Millisecond)
+	if err = sendUpdate(stream, req, client, "transaction appended to blockchain, sending hash to [endpoint]"); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Duration(rand.Int63n(1000)) * time.Millisecond)
+	rep := &pb.Message{
+		Type:      pb.RPC_TRANSFER,
+		Id:        req.Id,
+		Timestamp: time.Now().Format(time.RFC3339),
+		Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
+			Transaction: &pb.Transaction{
+				Account: account.Email,
+				Originator: &pb.Identity{
+					WalletAddress: account.WalletAddress,
+					Email:         account.Email,
+					Ivms101:       account.IVMS101,
+					Provider:      s.vasp.IVMS101,
+				},
+				Beneficiary: &pb.Identity{
+					WalletAddress: beneficiary.Address,
+					Email:         beneficiary.Email,
+					Ivms101:       "[simulated]",
+					Provider:      "[simulated]",
+				},
+				Amount:    transfer.Amount,
+				Debit:     true,
+				Completed: true,
+				Timestamp: time.Now().Format(time.RFC3339),
+			},
+		}},
+	}
+
+	if err = stream.Send(rep); err != nil {
+		return fmt.Errorf("could not send transfer reply to %q: %s", client, err)
+	}
+
+	return nil
+}
+
+func sendUpdate(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Command, client, update string) (err error) {
+	msg := &pb.Message{
+		Type:      pb.RPC_NORPC,
+		Id:        req.Id,
+		Update:    update,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	if err = stream.Send(msg); err != nil {
+		return fmt.Errorf("could not send message to %q: %s", client, err)
+	}
+	return nil
 }

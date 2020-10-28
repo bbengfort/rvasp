@@ -5,6 +5,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // VASP is a record of known partner VASPs and caches TRISA protocol information. This
@@ -90,12 +91,14 @@ func (Transaction) TableName() string {
 // wallet is a representation of the local VASPs knowledge about customers and bercause
 // the identity information could change between transactions. This intermediate table
 // is designed to more closely mimic data storage as part of a blockchain transaction.
+// The hash is used to assist with deduplicating identities
 type Identity struct {
 	gorm.Model
 	WalletAddress string `gorm:"not null;column:wallet_address"`
 	Wallet        Wallet `gorm:"foreignKey:WalletAddress;references:Address"`
 	IVMS101       string `gorm:"column:ivms101;not null"`
 	Provider      string `gorm:"not null"`
+	Hash          string `gorm:"not null"`
 }
 
 // TableName explicitly defines the name of the table for the model
@@ -125,7 +128,7 @@ func (a Account) BalanceFloat() float32 {
 // top. This function may also support pagination and limiting functions, which is why
 // we're using it rather than having a direct relationship on the model.
 func (a Account) Transactions(db *gorm.DB) (records []Transaction, err error) {
-	if err = db.Where("account_id = ?", a.ID).Find(&records).Error; err != nil {
+	if err = db.Preload(clause.Associations).Where("account_id = ?", a.ID).Find(&records).Error; err != nil {
 		return nil, err
 	}
 	return records, nil

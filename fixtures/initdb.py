@@ -2,7 +2,9 @@
 
 import os
 import json
+import base64
 import random
+import hashlib
 import sqlite3
 import argparse
 
@@ -445,6 +447,14 @@ WALLETS = [
     ],
 ]
 
+TRANSACTIONS = [
+    {
+        "originator": "george@bobvasp.co.uk",
+        "beneficiary": "jane@alicevasp.us",
+        "amount": 108.21,
+    },
+]
+
 
 def clean(conn):
     cur = conn.cursor()
@@ -511,6 +521,68 @@ def create_accounts(conn, vasp):
     cur.executemany(sql, params)
 
 
+def create_transactions(conn, vasp):
+    cur = conn.cursor()
+    acc = "SELECT id FROM accounts WHERE email=?"
+    idn = "INSERT INTO identities (wallet_address, ivms101, provider, hash) VALUES (?,?,?,?)"
+    trn = "INSERT INTO transactions (account_id, originator_id, beneficiary_id, amount, debit, completed, timestamp, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+    idg = "SELECT id FROM identities WHERE hash=?"
+
+    for tx in TRANSACTIONS:
+        txts = datetime.now()
+
+        # Insert originator identity
+        originator = find_wallet(tx["originator"])
+        oprovider = find_provider(tx["originator"])
+        ohash = identity_signature(originator[0], json.dumps(originator[3]), json.dumps(oprovider))
+        cur.execute(idn, [originator[0], json.dumps(originator[3]), json.dumps(oprovider), ohash])
+        cur.execute(idg, (ohash,))
+        originator_id = cur.fetchone()[0]
+
+        # Insert beneficiary identity
+        beneficiary = find_wallet(tx["beneficiary"])
+        bprovider = find_provider(tx["beneficiary"])
+        bhash = identity_signature(beneficiary[0], json.dumps(beneficiary[3]), json.dumps(bprovider))
+        cur.execute(idn, [beneficiary[0], json.dumps(beneficiary[3]), json.dumps(bprovider), bhash])
+        cur.execute(idg, (bhash,))
+        beneficiary_id = cur.fetchone()[0]
+
+        if tx["originator"].split("@")[-1].startswith(vasp):
+            # handle originator side transaction insert
+            cur.execute(acc, (tx["originator"],))
+            account_id = cur.fetchone()[0]
+            cur.execute(trn, (account_id, originator_id, beneficiary_id, tx["amount"], True, True, txts, datetime.now(), datetime.now()))
+
+        if tx["beneficiary"].split("@")[-1].startswith(vasp):
+            # handle beneficiary side transaction insert
+            cur.execute(acc, (tx["beneficiary"],))
+            account_id = cur.fetchone()[0]
+            cur.execute(trn, (account_id, originator_id, beneficiary_id, tx["amount"], False, True, txts, datetime.now(), datetime.now()))
+
+
+def find_wallet(email):
+    for wallet in WALLETS:
+        if wallet[1] == email:
+            return wallet
+    raise ValueError(f"could not find wallet for {email}")
+
+
+def find_provider(email):
+    domain = email.split("@")[-1]
+    for name, data in VASPS.items():
+        if domain.startswith(name):
+            return data
+    raise ValueError(f"could not find provider for {email}")
+
+
+def identity_signature(wallet_address, identity, provider):
+    m = hashlib.sha3_256()
+    m.update(wallet_address.encode("utf-8"))
+    m.update(identity.encode("utf-8"))
+    m.update(provider.encode("utf-8"))
+    return base64.b64encode(m.digest())
+
+
 def main(args):
     with sqlite3.connect(args.db) as conn:
         if args.clean:
@@ -519,6 +591,7 @@ def main(args):
         create_vasps(conn, args.vasp)
         create_wallets(conn, args.vasp)
         create_accounts(conn, args.vasp)
+        create_transactions(conn, args.vasp)
         conn.commit()
 
 
