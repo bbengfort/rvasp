@@ -96,10 +96,11 @@ enum RPC {
 
 // Specifies the category the message is related to for rVASP UI colorization
 enum MessageCategory {
-    TRISADS = 0;
-    TRISAP2P = 1;
-    BLOCKCHAIN = 2;
-    LEDGER = 3;
+    LEDGER = 0;
+    TRISADS = 1;
+    TRISAP2P = 2;
+    BLOCKCHAIN = 3;
+    ERROR = 4;
 }
 
 // A wrapper for the TransferRequet and AccountRequest RPCs to be sent via streaming.
