@@ -235,6 +235,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 				Type:      pb.RPC_TRANSFER,
 				Id:        req.Id,
 				Timestamp: time.Now().Format(time.RFC3339),
+				Category:  pb.MessageCategory_LEDGER,
 				Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
 					Error: pb.Errorf(pb.ErrNotFound, "account not found"),
 				}},
@@ -247,7 +248,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 		}
 		return fmt.Errorf("could not fetch account: %s", err)
 	}
-	if err = sendUpdate(stream, req, client, fmt.Sprintf("account %d accessed successfully", account.ID)); err != nil {
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("account %d accessed successfully", account.ID), pb.MessageCategory_LEDGER); err != nil {
 		return err
 	}
 
@@ -259,6 +260,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 				Type:      pb.RPC_TRANSFER,
 				Id:        req.Id,
 				Timestamp: time.Now().Format(time.RFC3339),
+				Category:  pb.MessageCategory_LEDGER,
 				Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
 					Error: pb.Errorf(pb.ErrNotFound, "beneficiary wallet not found"),
 				}},
@@ -271,40 +273,35 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 		}
 		return fmt.Errorf("could not fetch beneficiary wallet: %s", err)
 	}
-	if err = sendUpdate(stream, req, client, fmt.Sprintf("wallet %s (%s) provided by %s", beneficiary.Address, beneficiary.Email, beneficiary.Provider.Name)); err != nil {
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("wallet %s (%s) provided by %s", beneficiary.Address, beneficiary.Email, beneficiary.Provider.Name), pb.MessageCategory_BLOCKCHAIN); err != nil {
 		return err
 	}
 
-	if err = sendUpdate(stream, req, client, "beginning TRISA protocol for identity exchange"); err != nil {
+	if err = sendUpdate(stream, req, client, "beginning TRISA protocol for identity exchange", pb.MessageCategory_TRISAP2P); err != nil {
 		return err
 	}
 
-	if err = sendUpdate(stream, req, client, "VASP public key not cached, looking up TRISA directory service"); err != nil {
-		return err
-	}
-
-	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
-	if err = sendUpdate(stream, req, client, "sending handshake request to [endpoint]"); err != nil {
+	if err = sendUpdate(stream, req, client, "VASP public key not cached, looking up TRISA directory service", pb.MessageCategory_TRISADS); err != nil {
 		return err
 	}
 
 	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
-	if err = sendUpdate(stream, req, client, "sending handshake request to [endpoint]"); err != nil {
+	if err = sendUpdate(stream, req, client, "sending handshake request to [endpoint]", pb.MessageCategory_TRISAP2P); err != nil {
 		return err
 	}
 
 	time.Sleep(time.Duration(rand.Int63n(2200)) * time.Millisecond)
-	if err = sendUpdate(stream, req, client, "[vasp] verified, secure TRISA connection established"); err != nil {
+	if err = sendUpdate(stream, req, client, "[vasp] verified, secure TRISA connection established", pb.MessageCategory_TRISAP2P); err != nil {
 		return err
 	}
 
 	time.Sleep(time.Duration(rand.Int63n(1800)) * time.Millisecond)
-	if err = sendUpdate(stream, req, client, fmt.Sprintf("identity for beneficiary %q confirmed - beginning transaction", beneficiary.Email)); err != nil {
+	if err = sendUpdate(stream, req, client, fmt.Sprintf("identity for beneficiary %q confirmed - beginning transaction", beneficiary.Email), pb.MessageCategory_BLOCKCHAIN); err != nil {
 		return err
 	}
 
 	time.Sleep(time.Duration(rand.Int63n(6200)) * time.Millisecond)
-	if err = sendUpdate(stream, req, client, "transaction appended to blockchain, sending hash to [endpoint]"); err != nil {
+	if err = sendUpdate(stream, req, client, "transaction appended to blockchain, sending hash to [endpoint]", pb.MessageCategory_BLOCKCHAIN); err != nil {
 		return err
 	}
 
@@ -313,6 +310,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 		Type:      pb.RPC_TRANSFER,
 		Id:        req.Id,
 		Timestamp: time.Now().Format(time.RFC3339),
+		Category:  pb.MessageCategory_LEDGER,
 		Reply: &pb.Message_Transfer{Transfer: &pb.TransferReply{
 			Transaction: &pb.Transaction{
 				Account: account.Email,
@@ -343,11 +341,12 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 	return nil
 }
 
-func sendUpdate(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Command, client, update string) (err error) {
+func sendUpdate(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Command, client, update string, cat pb.MessageCategory) (err error) {
 	msg := &pb.Message{
 		Type:      pb.RPC_NORPC,
 		Id:        req.Id,
 		Update:    update,
+		Category:  cat,
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
 

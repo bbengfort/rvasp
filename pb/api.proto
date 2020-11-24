@@ -94,6 +94,14 @@ enum RPC {
     ACCOUNT = 2;
 }
 
+// Specifies the category the message is related to for rVASP UI colorization
+enum MessageCategory {
+    TRISADS = 0;
+    TRISAP2P = 1;
+    BLOCKCHAIN = 2;
+    LEDGER = 3;
+}
+
 // A wrapper for the TransferRequet and AccountRequest RPCs to be sent via streaming.
 message Command {
     RPC type = 1;       // what type of command is being sent to the rVASP
@@ -118,6 +126,7 @@ message Message {
     uint64 id = 2;
     string update = 3;
     string timestamp = 4;
+    MessageCategory category = 5;
 
     // if type and id are greater than zero, one of these fields will be set, matching
     // the RPC type described above.
