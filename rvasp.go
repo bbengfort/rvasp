@@ -92,7 +92,7 @@ func (s *Server) AccountStatus(ctx context.Context, req *pb.AccountRequest) (rep
 
 	// Lookup the account in the database
 	var account Account
-	if err = s.db.Where("email = ?", req.Account).First(&account).Error; err != nil {
+	if err = LookupAccount(s.db, req.Account).First(&account).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			rep.Error = pb.Errorf(pb.ErrNotFound, "account not found")
 			log.Info(rep.Error.Error())
@@ -232,7 +232,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 
 	// Lookup the account associated with the transfer originator
 	var account Account
-	if err = s.db.Where("email = ?", transfer.Account).First(&account).Error; err != nil {
+	if err = LookupAccount(s.db, transfer.Account).First(&account).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			rep := &pb.Message{
 				Type:      pb.RPC_TRANSFER,
@@ -257,7 +257,7 @@ func (s *Server) simulateTRISA(stream pb.TRISADemo_LiveUpdatesServer, req *pb.Co
 
 	// Lookup the wallet of the beneficiary
 	var beneficiary Wallet
-	if err = s.db.Preload("Provider").Where("email = ?", transfer.Beneficiary).Or("address = ?", transfer.Beneficiary).First(&beneficiary).Error; err != nil {
+	if err = LookupBeneficiary(s.db, transfer.Beneficiary).First(&beneficiary).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			rep := &pb.Message{
 				Type:      pb.RPC_TRANSFER,

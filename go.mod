@@ -7,6 +7,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.4 // indirect
 	github.com/shopspring/decimal v1.2.0
 	github.com/sirupsen/logrus v1.7.0
+	github.com/stretchr/testify v1.2.2
 	github.com/urfave/cli v1.22.4
 	golang.org/x/net v0.0.0-20201002202402-0a1ea396d57c
 	google.golang.org/grpc v1.32.0

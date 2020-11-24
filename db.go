@@ -140,3 +140,13 @@ func (t Transaction) AmountFloat() float32 {
 	bal, _ := t.Amount.Truncate(2).Float64()
 	return float32(bal)
 }
+
+// LookupAccount by email address or wallet address.
+func LookupAccount(db *gorm.DB, account string) *gorm.DB {
+	return db.Where("email = ?", account).Or("wallet_address = ?", account)
+}
+
+// LookupBeneficiary by email address or wallet address.
+func LookupBeneficiary(db *gorm.DB, beneficiary string) *gorm.DB {
+	return db.Preload("Provider").Where("email = ?", beneficiary).Or("address = ?", beneficiary)
+}
